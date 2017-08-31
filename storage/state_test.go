@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudfoundry/bosh-bootloader/fakes"
 	"github.com/cloudfoundry/bosh-bootloader/storage"
+	uuid "github.com/nu7hatch/gouuid"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -28,12 +29,17 @@ var _ = Describe("Store", func() {
 	})
 
 	AfterEach(func() {
+		storage.ResetUUIDNewV4()
 		storage.ResetMarshalIndent()
 	})
 
 	Describe("Set", func() {
 		Context("when credhub is enabled", func() {
 			It("stores the state into a file, sans IAAS credentials", func() {
+				storage.SetUUIDNewV4(func() (*uuid.UUID, error) {
+					return &uuid.UUID{}, nil
+				})
+
 				err := store.Set(storage.State{
 					IAAS: "aws",
 					AWS: storage.AWS{
@@ -199,6 +205,7 @@ var _ = Describe("Store", func() {
 				},
 				"envID": "some-env-id",
 				"tfState": "some-tf-state",
+				"id": "00000000-0000-0000-0000-000000000000",
 				"latestTFOutput": ""
 		    	}`))
 
@@ -284,6 +291,7 @@ var _ = Describe("Store", func() {
 					},
 					EnvID:   "some-env-id",
 					TFState: "some-tf-state",
+					ID:      "some-id",
 				})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -292,6 +300,7 @@ var _ = Describe("Store", func() {
 				Expect(data).To(MatchJSON(`{
 					"version": 9,
 					"iaas": "aws",
+					"id": "some-id",
 					"noDirector": false,
 					"migratedFromCloudFormation": false,
 					"aws": {
@@ -409,6 +418,18 @@ var _ = Describe("Store", func() {
 
 						err = store.Set(storage.State{})
 						Expect(err).To(MatchError(ContainSubstring("permission denied")))
+					})
+				})
+
+				Context("when the uuid cannot be read", func() {
+					It("returns an error", func() {
+						storage.SetUUIDNewV4(func() (*uuid.UUID, error) {
+							return nil, errors.New("some error")
+						})
+						err := store.Set(storage.State{
+							IAAS: "some-iaas",
+						})
+						Expect(err).To(MatchError("some error"))
 					})
 				})
 			})

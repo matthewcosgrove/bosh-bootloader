@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+
+	uuid "github.com/nu7hatch/gouuid"
 )
 
 var (
 	marshalIndent = json.MarshalIndent
+	uuidNewV4     = uuid.NewV4
 )
 
 const (
@@ -72,6 +75,7 @@ type Jumpbox struct {
 type State struct {
 	Version                    int     `json:"version"`
 	IAAS                       string  `json:"iaas"`
+	ID                         string  `json:"id"`
 	NoDirector                 bool    `json:"noDirector"`
 	MigratedFromCloudFormation bool    `json:"migratedFromCloudFormation"`
 	AWS                        AWS     `json:"aws,omitempty"`
@@ -115,6 +119,14 @@ func (s Store) Set(state State) error {
 	}
 
 	state.Version = s.version
+
+	if state.ID == "" {
+		uuid, err := uuidNewV4()
+		if err != nil {
+			return err
+		}
+		state.ID = uuid.String()
+	}
 
 	if state.Jumpbox.Enabled {
 		state.AWS.AccessKeyID = ""
