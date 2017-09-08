@@ -29,6 +29,7 @@ var _ = Describe("Manager", func() {
 			boshExecutor     *fakes.BOSHExecutor
 			logger           *fakes.Logger
 			socks5Proxy      *fakes.Socks5Proxy
+			sshKeyDeleter    *fakes.SSHKeyDeleter
 			boshManager      *bosh.Manager
 			incomingGCPState storage.State
 			terraformOutputs map[string]interface{}
@@ -42,7 +43,8 @@ var _ = Describe("Manager", func() {
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 
 			bosh.SetOSSetenv(func(key, value string) error {
 				osSetenvKey = key
@@ -388,6 +390,7 @@ kms_key_arn: some-kms-arn
 			boshExecutor     *fakes.BOSHExecutor
 			logger           *fakes.Logger
 			socks5Proxy      *fakes.Socks5Proxy
+			sshKeyDeleter    *fakes.SSHKeyDeleter
 			boshManager      *bosh.Manager
 			incomingGCPState storage.State
 			terraformOutputs map[string]interface{}
@@ -404,7 +407,8 @@ kms_key_arn: some-kms-arn
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 
 			bosh.SetOSSetenv(func(key, value string) error {
 				osSetenvKey = key
@@ -525,6 +529,36 @@ gcp_credentials_json: some-credential-json
 			}))
 		})
 
+		Context("when bosh director already exists", func() {
+			Context("when existing bosh director has an ssh key on the state", func() {
+				var afterKeyDeletionState storage.State
+
+				BeforeEach(func() {
+					incomingGCPState.BOSH.Variables = "jumpbox_ssh: something"
+					afterKeyDeletionState = storage.State{
+						IAAS:  "gcp",
+						EnvID: "some-env-id",
+						BOSH: storage.BOSH{
+							State: map[string]interface{}{
+								"some-key": "some-value",
+							},
+						},
+						TFState: "some-tf-state",
+					}
+					sshKeyDeleter.DeleteCall.Returns.State = afterKeyDeletionState
+				})
+
+				It("removes the existing bosh director ssh key from the state", func() {
+					afterJumpboxState, err := boshManager.CreateJumpbox(incomingGCPState, terraformOutputs)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(afterJumpboxState).To(Equal(afterKeyDeletionState))
+					Expect(sshKeyDeleter.DeleteCall.CallCount).To(Equal(1))
+					Expect(sshKeyDeleter.DeleteCall.Receives.State.BOSH.Variables).To(Equal("jumpbox_ssh: something"))
+				})
+			})
+		})
+
 		Context("when bosh director is created after jumpbox", func() {
 			It("generates a jumpbox and bosh manifest", func() {
 				afterJumpboxState, err := boshManager.CreateJumpbox(incomingGCPState, terraformOutputs)
@@ -634,15 +668,28 @@ gcp_credentials_json: some-credential-json
 				_, err := boshManager.CreateJumpbox(incomingGCPState, terraformOutputs)
 				Expect(err).To(MatchError("start proxy: coconut"))
 			})
+
+			Context("when jumpbox ssh key cannot be deleted from bosh vars", func() {
+				BeforeEach(func() {
+					sshKeyDeleter.DeleteCall.Returns.Error = errors.New("mango")
+					incomingGCPState.BOSH.Variables = "something containing jumpbox_ssh"
+				})
+
+				It("returns an error ", func() {
+					_, err := boshManager.CreateJumpbox(incomingGCPState, terraformOutputs)
+					Expect(err).To(MatchError("processing jumpbox key: mango"))
+				})
+			})
 		})
 	})
 
 	Describe("DeleteJumpbox", func() {
 		var (
-			boshExecutor *fakes.BOSHExecutor
-			logger       *fakes.Logger
-			socks5Proxy  *fakes.Socks5Proxy
-			boshManager  *bosh.Manager
+			boshExecutor  *fakes.BOSHExecutor
+			logger        *fakes.Logger
+			socks5Proxy   *fakes.Socks5Proxy
+			sshKeyDeleter *fakes.SSHKeyDeleter
+			boshManager   *bosh.Manager
 
 			vars string
 		)
@@ -651,7 +698,8 @@ gcp_credentials_json: some-credential-json
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 
 			vars = `jumpbox_ssh:
   private_key: some-private-key
@@ -742,10 +790,11 @@ gcp_credentials_json: some-credential-json
 
 	Describe("Delete", func() {
 		var (
-			boshExecutor *fakes.BOSHExecutor
-			logger       *fakes.Logger
-			socks5Proxy  *fakes.Socks5Proxy
-			boshManager  *bosh.Manager
+			boshExecutor  *fakes.BOSHExecutor
+			logger        *fakes.Logger
+			socks5Proxy   *fakes.Socks5Proxy
+			sshKeyDeleter *fakes.SSHKeyDeleter
+			boshManager   *bosh.Manager
 
 			osSetenvKey   string
 			osSetenvValue string
@@ -755,7 +804,8 @@ gcp_credentials_json: some-credential-json
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 
 			bosh.SetOSSetenv(func(key, value string) error {
 				osSetenvKey = key
@@ -906,17 +956,19 @@ gcp_credentials_json: some-credential-json
 
 	Describe("GetJumpboxDeploymentVars", func() {
 		var (
-			boshExecutor *fakes.BOSHExecutor
-			logger       *fakes.Logger
-			socks5Proxy  *fakes.Socks5Proxy
-			boshManager  *bosh.Manager
+			boshExecutor  *fakes.BOSHExecutor
+			logger        *fakes.Logger
+			socks5Proxy   *fakes.Socks5Proxy
+			sshKeyDeleter *fakes.SSHKeyDeleter
+			boshManager   *bosh.Manager
 		)
 
 		BeforeEach(func() {
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 		})
 
 		Context("aws", func() {
@@ -1017,17 +1069,19 @@ gcp_credentials_json: some-credential-json
 
 	Describe("GetDeploymentVars", func() {
 		var (
-			boshExecutor *fakes.BOSHExecutor
-			logger       *fakes.Logger
-			socks5Proxy  *fakes.Socks5Proxy
-			boshManager  *bosh.Manager
+			boshExecutor  *fakes.BOSHExecutor
+			logger        *fakes.Logger
+			socks5Proxy   *fakes.Socks5Proxy
+			sshKeyDeleter *fakes.SSHKeyDeleter
+			boshManager   *bosh.Manager
 		)
 
 		BeforeEach(func() {
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 		})
 
 		Context("gcp", func() {
@@ -1265,17 +1319,19 @@ region: some-region
 
 	Describe("Version", func() {
 		var (
-			boshExecutor *fakes.BOSHExecutor
-			logger       *fakes.Logger
-			socks5Proxy  *fakes.Socks5Proxy
-			boshManager  *bosh.Manager
+			boshExecutor  *fakes.BOSHExecutor
+			logger        *fakes.Logger
+			socks5Proxy   *fakes.Socks5Proxy
+			sshKeyDeleter *fakes.SSHKeyDeleter
+			boshManager   *bosh.Manager
 		)
 
 		BeforeEach(func() {
 			boshExecutor = &fakes.BOSHExecutor{}
 			logger = &fakes.Logger{}
 			socks5Proxy = &fakes.Socks5Proxy{}
-			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy)
+			sshKeyDeleter = &fakes.SSHKeyDeleter{}
+			boshManager = bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 
 			boshExecutor.VersionCall.Returns.Version = "2.0.24"
 		})

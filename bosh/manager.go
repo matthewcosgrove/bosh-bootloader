@@ -3,6 +3,7 @@ package bosh
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	yaml "gopkg.in/yaml.v2"
 
@@ -20,9 +21,10 @@ const (
 )
 
 type Manager struct {
-	executor    executor
-	logger      logger
-	socks5Proxy socks5Proxy
+	executor      executor
+	logger        logger
+	socks5Proxy   socks5Proxy
+	sshKeyDeleter sshKeyDeleter
 }
 
 type directorVars struct {
@@ -114,11 +116,16 @@ type socks5Proxy interface {
 	Addr() string
 }
 
-func NewManager(executor executor, logger logger, socks5Proxy socks5Proxy) *Manager {
+type sshKeyDeleter interface {
+	Delete(state storage.State) (storage.State, error)
+}
+
+func NewManager(executor executor, logger logger, socks5Proxy socks5Proxy, sshKeyDeleter sshKeyDeleter) *Manager {
 	return &Manager{
-		executor:    executor,
-		logger:      logger,
-		socks5Proxy: socks5Proxy,
+		executor:      executor,
+		logger:        logger,
+		socks5Proxy:   socks5Proxy,
+		sshKeyDeleter: sshKeyDeleter,
 	}
 }
 
@@ -186,6 +193,14 @@ func (m *Manager) CreateJumpbox(state storage.State, terraformOutputs map[string
 	jumpboxPrivateKey, err := getJumpboxPrivateKey(interpolateOutputs.Variables)
 	if err != nil {
 		return storage.State{}, fmt.Errorf("jumpbox key: %s", err)
+	}
+
+	if strings.Contains(state.BOSH.Variables, "jumpbox_ssh") {
+		state, err = m.sshKeyDeleter.Delete(state)
+		if err != nil {
+			// not tested...yet
+			return storage.State{}, fmt.Errorf("processing jumpbox key: %s", err)
+		}
 	}
 
 	err = m.socks5Proxy.Start(jumpboxPrivateKey, state.Jumpbox.URL)

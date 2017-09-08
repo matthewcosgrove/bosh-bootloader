@@ -140,7 +140,8 @@ func main() {
 	boshCommand := bosh.NewCmd(os.Stderr)
 	boshExecutor := bosh.NewExecutor(boshCommand, ioutil.TempDir, ioutil.ReadFile, json.Unmarshal,
 		json.Marshal, ioutil.WriteFile)
-	boshManager := bosh.NewManager(boshExecutor, logger, socks5Proxy)
+	sshKeyDeleter := bosh.NewSSHKeyDeleter()
+	boshManager := bosh.NewManager(boshExecutor, logger, socks5Proxy, sshKeyDeleter)
 	boshClientProvider := bosh.NewClientProvider(socks5Proxy)
 
 	// Environment Validators
@@ -191,7 +192,6 @@ func main() {
 	commandSet["help"] = usage
 	commandSet["version"] = commands.NewVersion(Version, logger)
 	commandSet["up"] = up
-	sshKeyDeleter := bosh.NewSSHKeyDeleter()
 	commandSet["rotate"] = commands.NewRotate(stateValidator, sshKeyDeleter, up)
 	commandSet["destroy"] = commands.NewDestroy(
 		logger, os.Stdin, boshManager, vpcStatusChecker, stackManager,
