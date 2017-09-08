@@ -40,6 +40,12 @@ func (t TemplateGenerator) Generate(state storage.State) string {
 			template = strings.Join([]string{template, CFDNSTemplate}, "\n")
 		}
 	}
+	switch state.Jumpbox.Enabled {
+	case true:
+		template = strings.Join([]string{template, JumpboxTemplate}, "\n")
+	case false:
+		template = strings.Join([]string{template, NonJumpboxTemplate}, "\n")
+	}
 	return template
 }
 
