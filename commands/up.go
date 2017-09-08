@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -63,10 +62,6 @@ func (u Up) CheckFastFails(args []string, state storage.State) error {
 		if err != nil {
 			return err
 		}
-	}
-
-	if config.jumpbox && !state.Jumpbox.Enabled && state.EnvID != "" {
-		return errors.New(`Environment without credhub already exists, you must recreate your environment to use "--credhub"`)
 	}
 
 	if state.EnvID != "" && config.name != "" && config.name != state.EnvID {
