@@ -1,0 +1,16 @@
+#/bin/bash
+
+: ${CONCOURSE_EXTERNAL_URL:?"Need to set CONCOURSE_EXTERNAL_URL non-empty."}
+: ${CONCOURSE_BASIC_AUTH_PASSWORD:?"Need to set CONCOURSE_BASIC_AUTH_PASSWORD non-empty."}
+
+source lib/patch-concourse-yaml.sh
+source lib/set-bosh-env.sh
+
+bosh l
+bosh stemcells
+bosh us https://s3.amazonaws.com/bosh-gce-light-stemcells/light-bosh-stemcell-3445.7-google-kvm-ubuntu-trusty-go_agent.tgz
+
+bosh ur https://github.com/concourse/concourse/releases/download/v3.4.1/concourse-3.4.1.tgz
+bosh ur https://github.com/concourse/concourse/releases/download/v3.4.1/garden-runc-1.6.0.tgz
+
+bosh -d concourse deploy /tmp/patched-concourse.yml -l settings.yml --var=external_url=$CONCOURSE_EXTERNAL_URL --var=basic_auth_password=$CONCOURSE_BASIC_AUTH_PASSWORD

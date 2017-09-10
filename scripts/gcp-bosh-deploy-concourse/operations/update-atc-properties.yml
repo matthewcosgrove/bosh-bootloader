@@ -1,0 +1,13 @@
+---
+- op: add
+  path: /instance_groups/name=web/jobs/name=atc/properties/tls_bind_port
+  value: 443
+- op: add
+  path: /instance_groups/name=web/jobs/name=atc/properties/bind_port
+  value: 80
+- op: remove
+  path: /instance_groups/name=web/jobs/name=atc/properties/tls_cert
+- op: remove
+  path: /instance_groups/name=web/jobs/name=atc/properties/tls_key
+- op: remove
+  path: /instance_groups/name=web/jobs/name=atc/properties/tls_bind_port

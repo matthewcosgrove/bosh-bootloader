@@ -1,0 +1,10 @@
+vm_type: n1-standard-1
+vm_extensions_lb: lb
+external_url: <changeme>
+basic_auth_username: admin
+basic_auth_password: <changeme>
+vm_extensions_worker: 50GB_ephemeral_disk
+persistent_disk_type: 5GB
+
+postgresql_password: password
+postgresql_role: db
